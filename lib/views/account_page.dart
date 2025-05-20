@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:firebase_flutter_notification/viewmodels/account_viewmodel.dart';
 import 'package:firebase_flutter_notification/viewmodels/auth_viewmodel.dart';
 import 'package:firebase_flutter_notification/views/login_page.dart';
-import 'package:firebase_flutter_notification/services/notification.dart';
 
 class AccountPage extends StatelessWidget {
   const AccountPage({super.key});
@@ -96,20 +95,6 @@ class _AccountView extends StatelessWidget {
                     onPressed: () async {
                       final authViewModel = context.read<AuthViewModel>();
                       await authViewModel.signOut();
-
-                      // Send logout notification
-                      await NotificationService.createNotification(
-                        id: DateTime.now()
-                            .millisecondsSinceEpoch
-                            .remainder(100000),
-                        title: 'Logged Out',
-                        body:
-                            'You have been successfully logged out. See you next time!',
-                        payload: {
-                          'type': 'logout',
-                          'email': user.email,
-                        },
-                      );
                     },
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.red,

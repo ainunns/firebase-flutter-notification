@@ -14,9 +14,10 @@ class _RegisterPageState extends State<RegisterPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  bool _isProcessing = false;
 
   void navigateLogin() {
-    if (!context.mounted) return;
+    if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/login');
   }
 
@@ -24,17 +25,55 @@ class _RegisterPageState extends State<RegisterPage> {
     if (!_formKey.currentState!.validate()) return;
 
     final viewModel = context.read<AuthViewModel>();
-    await viewModel.signUp(
-      _emailController.text.trim(),
-      _passwordController.text.trim(),
-    );
+    setState(() => _isProcessing = true);
 
-    if (viewModel.error != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(viewModel.error!)),
+    try {
+      await viewModel.signUp(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
       );
-    } else if (mounted) {
+
+      if (!mounted) return;
+
+      if (viewModel.error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(viewModel.error!),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Wait for auth state to be fully updated
+      await Future.delayed(const Duration(milliseconds: 1000));
+
+      if (!mounted) return;
+
+      // Show success message and navigate
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Registration successful! Please log in to continue.'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Navigate to login
       navigateLogin();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('An error occurred: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -62,6 +101,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           decoration:
                               const InputDecoration(label: Text('Email')),
                           keyboardType: TextInputType.emailAddress,
+                          enabled: !_isProcessing && !viewModel.isLoading,
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return 'Please enter your email';
@@ -77,6 +117,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           obscureText: true,
                           decoration:
                               const InputDecoration(label: Text('Password')),
+                          enabled: !_isProcessing && !viewModel.isLoading,
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return 'Please enter your password';
@@ -92,6 +133,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           obscureText: true,
                           decoration: const InputDecoration(
                               label: Text('Confirm Password')),
+                          enabled: !_isProcessing && !viewModel.isLoading,
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return 'Please confirm your password';
@@ -107,8 +149,10 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                   const SizedBox(height: 24),
                   OutlinedButton(
-                    onPressed: viewModel.isLoading ? null : register,
-                    child: viewModel.isLoading
+                    onPressed: (_isProcessing || viewModel.isLoading)
+                        ? null
+                        : register,
+                    child: (_isProcessing || viewModel.isLoading)
                         ? const SizedBox(
                             height: 20,
                             width: 20,
@@ -121,7 +165,9 @@ class _RegisterPageState extends State<RegisterPage> {
                     children: [
                       const Text('Already have an account?'),
                       TextButton(
-                        onPressed: navigateLogin,
+                        onPressed: (_isProcessing || viewModel.isLoading)
+                            ? null
+                            : navigateLogin,
                         child: const Text('Login'),
                       ),
                     ],

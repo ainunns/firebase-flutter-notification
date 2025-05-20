@@ -1,15 +1,15 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_flutter_notification/models/user.dart';
 import 'package:firebase_flutter_notification/services/notification.dart';
-import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:firebase_flutter_notification/main.dart';
 
 class AuthViewModel extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   AppUser? _currentUser;
   bool _isLoading = false;
   String? _error;
-  bool _isProcessingNotification = false;
+  final bool _isProcessingNotification = false;
 
   AuthViewModel() {
     _init();
@@ -22,53 +22,26 @@ class AuthViewModel extends ChangeNotifier {
   bool get isProcessingNotification => _isProcessingNotification;
 
   void _init() {
-    _auth.authStateChanges().listen((User? user) async {
-      final oldUser = _currentUser;
-      _currentUser = user != null ? AppUser.fromFirebaseUser(user) : null;
-
-      // Send welcome notification when user signs in
-      if (_currentUser != null && oldUser == null) {
-        await _sendWelcomeNotification();
+    _auth.authStateChanges().listen((User? user) {
+      try {
+        if (user == null) {
+          _currentUser = null;
+        } else {
+          // Create a new AppUser instance with only the essential fields
+          _currentUser = AppUser(
+            id: user.uid,
+            email: user.email ?? '',
+            displayName: user.displayName,
+            photoURL: user.photoURL,
+            isEmailVerified: user.emailVerified,
+          );
+        }
+      } catch (e) {
+        // If anything goes wrong, just set to null
+        _currentUser = null;
       }
-
       notifyListeners();
     });
-  }
-
-  Future<void> _sendWelcomeNotification() async {
-    if (_isProcessingNotification) return;
-
-    try {
-      _isProcessingNotification = true;
-      notifyListeners();
-
-      bool isAllowed = await AwesomeNotifications().isNotificationAllowed();
-
-      if (!isAllowed) {
-        isAllowed =
-            await AwesomeNotifications().requestPermissionToSendNotifications();
-      }
-
-      if (isAllowed && _currentUser != null) {
-        final user = _currentUser!;
-        await NotificationService.createNotification(
-          id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
-          title: 'Welcome Back! 👋',
-          body:
-              'Hello ${user.displayName ?? user.email}! You have successfully logged in.',
-          payload: {
-            'type': 'login',
-            'email': user.email,
-            'userId': user.id,
-          },
-        );
-      }
-    } catch (e) {
-      // Error handling is done through the UI
-    } finally {
-      _isProcessingNotification = false;
-      notifyListeners();
-    }
   }
 
   Future<void> signIn(String email, String password) async {
@@ -81,6 +54,21 @@ class AuthViewModel extends ChangeNotifier {
         email: email,
         password: password,
       );
+
+      // Send welcome notification after successful login
+      if (_currentUser != null) {
+        try {
+          await NotificationService.createNotification(
+            id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+            title: 'Welcome Back! 👋',
+            body:
+                'Hello ${_currentUser!.displayName ?? _currentUser!.email}! You have successfully logged in.',
+            payload: {'type': 'login'},
+          );
+        } catch (e) {
+          // Ignore notification errors
+        }
+      }
 
       _isLoading = false;
       notifyListeners();
@@ -101,10 +89,23 @@ class AuthViewModel extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      await _auth.createUserWithEmailAndPassword(
+      // Temporarily disable auth state listener
+      _currentUser = null;
+      notifyListeners();
+
+      // Create the user
+      final userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
+
+      // Ensure we have a valid user before proceeding
+      if (userCredential.user == null) {
+        throw Exception('Failed to create user');
+      }
+
+      // Sign out immediately
+      await _auth.signOut();
 
       _isLoading = false;
       notifyListeners();
@@ -127,28 +128,24 @@ class AuthViewModel extends ChangeNotifier {
 
       await _auth.signOut();
 
-      _isLoading = false;
-      notifyListeners();
-    } catch (e) {
-      _isLoading = false;
-      _error = e.toString();
-      notifyListeners();
-    }
-  }
+      // Send logout notification
+      await NotificationService.createNotification(
+        id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+        title: 'Logged Out',
+        body: 'You have been successfully logged out. See you next time!',
+        payload: {'type': 'logout'},
+      );
 
-  Future<void> resetPassword(String email) async {
-    try {
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
-
-      await _auth.sendPasswordResetEmail(email: email);
+      // Force navigation to login page
+      if (MyApp.navigatorKey.currentContext != null) {
+        Navigator.of(MyApp.navigatorKey.currentContext!)
+            .pushNamedAndRemoveUntil(
+          '/login',
+          (route) => false,
+        );
+      }
 
       _isLoading = false;
-      notifyListeners();
-    } on FirebaseAuthException catch (e) {
-      _isLoading = false;
-      _error = _getAuthErrorMessage(e);
       notifyListeners();
     } catch (e) {
       _isLoading = false;

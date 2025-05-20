@@ -27,20 +27,20 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     final viewModel = context.read<AuthViewModel>();
-    final email = _emailController.text.trim();
+    setState(() => _isProcessing = true);
 
     try {
-      setState(() => _isProcessing = true);
+      await viewModel.signIn(
+          _emailController.text.trim(), _passwordController.text.trim());
 
-      await viewModel.signIn(email, _passwordController.text.trim());
-
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       if (viewModel.error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(viewModel.error!)),
+          SnackBar(
+            content: Text(viewModel.error!),
+            backgroundColor: Colors.red,
+          ),
         );
         return;
       }
@@ -62,7 +62,10 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('An error occurred: ${e.toString()}')),
+          SnackBar(
+            content: Text('An error occurred: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {

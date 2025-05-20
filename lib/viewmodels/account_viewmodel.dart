@@ -43,7 +43,7 @@ class AccountViewModel extends ChangeNotifier {
 
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        await user.updateEmail(email);
+        await user.verifyBeforeUpdateEmail(email);
         await user.reload();
       }
 
